@@ -1,0 +1,11 @@
+# Ignore all datasets and heavy model weights to prevent GitHub 100MB file limit errors
+dataset/
+**/dataset/
+*.keras
+*.h5
+*.hdf5
+__pycache__/
+*.pyc
+.env
+.venv
+venv/
