@@ -28,6 +28,22 @@ from preprocessing import (
     preprocess_for_prediction,
 )
 
+# ── Debug flag (A2) ──────────────────────────────────────────────────────────
+# Set the env var AGRISCAN_DEBUG=1 to enable the developer pipeline sidebar.
+DEBUG_MODE = os.environ.get("AGRISCAN_DEBUG") == "1"
+
+
+# ── Confidence bar helper (B5) ───────────────────────────────────────────────
+def render_confidence_bar(confidence: float):
+    st.markdown(
+        f'<div class="agriscan-confidence-track">'
+        f'<div class="agriscan-confidence-fill" style="--fill: {confidence:.1f}%;"></div>'
+        f'</div>'
+        f'<p style="font-size:0.8rem;color:#5b6157;margin-top:4px;">Confidence: {confidence:.1f}%</p>',
+        unsafe_allow_html=True,
+    )
+
+
 # Page configuration
 st.set_page_config(
     page_title="AgriScan - Plant Disease Detection",
@@ -35,8 +51,90 @@ st.set_page_config(
     layout="wide",
 )
 
+# ── CSS animations & styling (Part B) ────────────────────────────────────────
+st.markdown("""
+<style>
+/* B1: Predict button press feedback */
+.stButton > button {
+    transition: transform 100ms ease-out;
+}
+.stButton > button:active {
+    transform: scale(0.97);
+}
 
-# Load model and class indices
+/* B2: uploaded image mounts with a soft entrance, not a hard pop */
+[data-testid="stImage"] {
+    animation: agriscanFadeUp 300ms ease-out;
+}
+[data-testid="stImage"] img {
+    max-width: 280px;
+    margin: 0 auto;
+    display: block;
+}
+
+/* Allow full size in fullscreen/dialog overlay */
+[data-testid="stModal"] [data-testid="stImage"] img,
+dialog [data-testid="stImage"] img,
+[data-baseweb="modal"] [data-testid="stImage"] img {
+    max-width: 100% !important;
+}
+
+/* B3: leaf-validity / warning / error alerts mount with the same entrance */
+[data-testid="stAlert"] {
+    animation: agriscanFadeUp 250ms ease-out;
+}
+
+@keyframes agriscanFadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* B4: prediction result block */
+.st-key-agriscan-result {
+    animation: agriscanResultReveal 400ms ease-out;
+}
+@keyframes agriscanResultReveal {
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* B5: confidence bar */
+.agriscan-confidence-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #E4E9DD;
+    overflow: hidden;
+    margin: 6px 0 2px;
+}
+.agriscan-confidence-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #C62828, #F9A825, #2E7D32);
+    background-size: 300% 100%;
+    background-position: calc((100% - var(--fill)) * -1) 0;
+    width: var(--fill);
+    animation: agriscanGrowBar 600ms ease-out;
+}
+@keyframes agriscanGrowBar {
+    from { width: 0%; }
+    to   { width: var(--fill); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stButton > button,
+    [data-testid="stImage"],
+    [data-testid="stAlert"],
+    .st-key-agriscan-result,
+    .agriscan-confidence-fill {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ── Load model and class indices (A5: wrapped in spinner) ────────────────────
 @st.cache_resource
 def load_model_and_classes():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -57,9 +155,10 @@ def load_model_and_classes():
     return model, class_names
 
 
-model, class_names = load_model_and_classes()
+with st.spinner("Loading model..."):
+    model, class_names = load_model_and_classes()
 
-# ── Sidebar: Image Processing Pipeline (expandable) ─────────────────────────
+# ── Sidebar: Image Processing Pipeline (A2: gated behind DEBUG_MODE) ─────────
 with st.sidebar:
     st.header("🔬 Image Processing Pipeline")
     st.caption(
@@ -73,25 +172,26 @@ st.title("🌱 AgriScan -- Plant Disease Detection")
 st.write("Upload a plant leaf image and get disease prediction with treatment advice.")
 st.divider()
 
-crop_type = st.radio(
-    "Select Crop Category",
-    [
-        "Fruit/Vegetable (Potato, Tomato, Cotton, Sugarcane)",
-        "Grain Crops (Corn, Rice, Wheat)",
-    ],
-)
-st.divider()
+# A3: crop_type radio removed — it was read but never wired to any logic.
 
 if model is None or not class_names:
     st.error("Model or class indices not found! Please run the training script first.")
 else:
-    uploaded_file = st.file_uploader("Upload Leaf Image", type=["jpg", "jpeg", "png"])
+    upload_col, camera_col = st.columns(2)
+    with upload_col:
+        uploaded_file = st.file_uploader("Upload Leaf Image", type=["jpg", "jpeg", "png"])
+    with camera_col:
+        camera_file = st.camera_input("📷 Take a Photo")
 
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
+    # Use camera capture if available, otherwise fall back to upload
+    source_file = camera_file if camera_file is not None else uploaded_file
+
+    if source_file is not None:
+        image = Image.open(source_file)
 
         st.subheader("Uploaded Leaf Image")
-        st.image(image, width=350)
+        # A6: responsive width capped visually by CSS max-width rule above
+        st.image(image, use_container_width=True)
 
         # ── Run shared preprocessing (used by both pipeline view & prediction) ──
         rgb_image, original_mode, was_converted = convert_to_rgb(image)
@@ -101,7 +201,14 @@ else:
         normed_array = normalize_array(img_array)
         batched_array = expand_batch_dim(normed_array)
 
-        # ── Sidebar pipeline stages (only if enabled) ───────────────────────
+        # A4: Show leaf validity warning immediately after the image preview
+        if not is_leaf:
+            st.warning(
+                "⚠️ This doesn't look like a leaf image. "
+                "Please upload a clear photo of a plant leaf."
+            )
+
+        # ── Sidebar pipeline stages (only if debug + enabled) ───────────────
         if show_pipeline:
             with st.sidebar:
                 st.divider()
@@ -195,33 +302,31 @@ else:
                     st.info("This exact tensor is fed to agriscan_model.keras.")
 
         # ── Main prediction flow ────────────────────────────────────────────
-        if st.button("🔍 Predict Disease"):
-            if not is_leaf:
-                st.warning(
-                    "⚠️ This doesn't look like a leaf image. "
-                    "Please upload a clear photo of a plant leaf."
-                )
-            else:
-                with st.spinner("Analyzing image..."):
-                    prediction = model.predict(batched_array)
+        # A4: button disabled when not a leaf so users can't reach a dead end
+        if st.button("🔍 Predict Disease", disabled=not is_leaf):
+            with st.spinner("Analyzing image..."):
+                prediction = model.predict(batched_array)
 
-                index = int(np.argmax(prediction))
-                confidence = float(np.max(prediction)) * 100
-                disease_class = class_names.get(index, "Unknown")
+            index = int(np.argmax(prediction))
+            confidence = float(np.max(prediction)) * 100
+            disease_class = class_names.get(index, "Unknown")
 
+            # B4: keyed container so .st-key-agriscan-result CSS fires on mount
+            with st.container(key="agriscan-result"):
                 st.divider()
                 st.subheader("Prediction Result")
 
                 if confidence < 70.0:
                     st.warning("⚠️ Low confidence in prediction. Please try a clearer photo!")
-                    st.info(f"Top guess: {disease_class} (Confidence: {confidence:.2f}%)")
+                    st.caption(f"Top guess: {disease_class}")
+                    render_confidence_bar(confidence)
                 else:
                     if "healthy" in disease_class.lower():
                         st.success(f"🌿 {disease_class}")
                     else:
                         st.error(f"⚠️ {disease_class}")
 
-                    st.info(f"Confidence: {confidence:.2f}%")
+                    render_confidence_bar(confidence)
 
                 # Display info and treatment
                 info = disease_info.get(disease_class, {})
