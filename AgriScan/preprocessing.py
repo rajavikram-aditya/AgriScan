@@ -22,24 +22,28 @@ def convert_to_rgb(img: Image.Image) -> tuple[Image.Image, str, bool]:
     return img, original_mode, False
 
 
-def is_likely_leaf(img: Image.Image, min_green_ratio: float = 0.15) -> tuple[bool, float, np.ndarray]:
+def is_likely_leaf(img: Image.Image, min_green_ratio: float = 0.10) -> tuple[bool, float, np.ndarray]:
     """
-    Check whether an image is likely a leaf by measuring the fraction
-    of green-dominant pixels.
+    Check whether an image is likely a leaf/plant tissue by measuring the fraction
+    of vegetation pixels (green dominant or yellow/brown diseased leaf tissue).
 
     Returns:
         (is_leaf, green_ratio, green_mask)
         - is_leaf: True if green_ratio >= min_green_ratio
         - green_ratio: float in [0, 1]
-        - green_mask: boolean ndarray, True where pixel is green-dominant
+        - green_mask: boolean ndarray, True where pixel is leaf vegetation
     """
     rgb_img = img.convert("RGB") if img.mode != "RGB" else img
     arr = np.array(rgb_img).astype(int)
 
     r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
 
-    # Green-dominant: G > R, G > B, and bright enough to exclude shadows
-    green_mask = (g > r) & (g > b) & (g > 30)
+    # Green-dominant: G > R, G > B, G > 30
+    green_pixels = (g > r) & (g > b) & (g > 30)
+    # Yellow/brown diseased leaf tissue (common in Wheat Blight/Foot Rot): R and G close, B significantly lower
+    yellow_brown_leaf = (r > 60) & (g > 40) & (abs(r - g) < 45) & (b < g - 15)
+
+    green_mask = green_pixels | yellow_brown_leaf
     green_ratio = float(np.sum(green_mask)) / (arr.shape[0] * arr.shape[1])
 
     return green_ratio >= min_green_ratio, green_ratio, green_mask

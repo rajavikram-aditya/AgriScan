@@ -172,11 +172,16 @@ st.title("🌱 AgriScan -- Plant Disease Detection")
 st.write("Upload a plant leaf image and get disease prediction with treatment advice.")
 st.divider()
 
-# A3: crop_type radio removed — it was read but never wired to any logic.
-
 if model is None or not class_names:
     st.error("Model or class indices not found! Please run the training script first.")
 else:
+    crop_options = ["Auto-Detect (All Crops)", "Wheat", "Rice", "Potato", "Cotton", "Sugarcane"]
+    selected_crop = st.selectbox(
+        "🌾 Filter Crop Category (Optional)",
+        crop_options,
+        help="If your crop is misidentified due to similar leaf spot patterns (e.g. Wheat vs Rice), select your crop category here."
+    )
+
     upload_col, camera_col = st.columns(2)
     with upload_col:
         uploaded_file = st.file_uploader("Upload Leaf Image", type=["jpg", "jpeg", "png"])
@@ -305,10 +310,28 @@ else:
         # A4: button disabled when not a leaf so users can't reach a dead end
         if st.button("🔍 Predict Disease", disabled=not is_leaf):
             with st.spinner("Analyzing image..."):
-                prediction = model.predict(batched_array)
+                raw_prediction = model.predict(batched_array)[0]
 
-            index = int(np.argmax(prediction))
-            confidence = float(np.max(prediction)) * 100
+            # If a specific crop category is chosen, filter probabilities to that crop
+            if selected_crop != "Auto-Detect (All Crops)":
+                filtered_indices = [idx for idx, name in class_names.items() if name.lower().startswith(selected_crop.lower())]
+                if filtered_indices:
+                    filtered_probs = raw_prediction[filtered_indices]
+                    sum_prob = np.sum(filtered_probs)
+                    if sum_prob > 0:
+                        norm_probs = filtered_probs / sum_prob
+                    else:
+                        norm_probs = filtered_probs
+                    best_local_idx = int(np.argmax(norm_probs))
+                    index = filtered_indices[best_local_idx]
+                    confidence = float(norm_probs[best_local_idx]) * 100
+                else:
+                    index = int(np.argmax(raw_prediction))
+                    confidence = float(np.max(raw_prediction)) * 100
+            else:
+                index = int(np.argmax(raw_prediction))
+                confidence = float(np.max(raw_prediction)) * 100
+
             disease_class = class_names.get(index, "Unknown")
 
             # B4: keyed container so .st-key-agriscan-result CSS fires on mount
