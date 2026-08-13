@@ -310,34 +310,47 @@ else:
         # A4: button disabled when not a leaf so users can't reach a dead end
         if st.button("🔍 Predict Disease", disabled=not is_leaf):
             with st.spinner("Analyzing image..."):
-                raw_prediction = model.predict(batched_array)[0]
+                st.session_state["raw_prediction"] = model.predict(batched_array)[0]
 
-            # If a specific crop category is chosen, filter probabilities to that crop
-            if selected_crop != "Auto-Detect (All Crops)":
-                filtered_indices = [idx for idx, name in class_names.items() if name.lower().startswith(selected_crop.lower())]
-                if filtered_indices:
-                    filtered_probs = raw_prediction[filtered_indices]
-                    sum_prob = np.sum(filtered_probs)
-                    if sum_prob > 0:
-                        norm_probs = filtered_probs / sum_prob
-                    else:
-                        norm_probs = filtered_probs
-                    best_local_idx = int(np.argmax(norm_probs))
-                    index = filtered_indices[best_local_idx]
-                    confidence = float(norm_probs[best_local_idx]) * 100
-                else:
-                    index = int(np.argmax(raw_prediction))
-                    confidence = float(np.max(raw_prediction)) * 100
+        if "raw_prediction" in st.session_state:
+            raw_prediction = st.session_state["raw_prediction"]
+
+            # Compute crop-filtered best predictions for each crop
+            crop_results = {}
+            for crop_name in ["Wheat", "Rice", "Potato", "Cotton", "Sugarcane"]:
+                crop_indices = [idx for idx, name in class_names.items() if name.lower().startswith(crop_name.lower())]
+                if crop_indices:
+                    c_probs = raw_prediction[crop_indices]
+                    c_best_local = int(np.argmax(c_probs))
+                    c_index = crop_indices[c_best_local]
+                    c_conf = (c_probs[c_best_local] / np.sum(c_probs)) * 100 if np.sum(c_probs) > 0 else 0
+                    crop_results[crop_name] = (class_names[c_index], c_conf, raw_prediction[c_index])
+
+            # Determine overall top prediction
+            overall_index = int(np.argmax(raw_prediction))
+            overall_class = class_names.get(overall_index, "Unknown")
+            overall_conf = float(np.max(raw_prediction)) * 100
+
+            # Determine active crop selection
+            if selected_crop != "Auto-Detect (All Crops)" and selected_crop in crop_results:
+                disease_class, confidence, _ = crop_results[selected_crop]
             else:
-                index = int(np.argmax(raw_prediction))
-                confidence = float(np.max(raw_prediction)) * 100
-
-            disease_class = class_names.get(index, "Unknown")
+                disease_class = overall_class
+                confidence = overall_conf
 
             # B4: keyed container so .st-key-agriscan-result CSS fires on mount
             with st.container(key="agriscan-result"):
                 st.divider()
                 st.subheader("Prediction Result")
+
+                # If top overall prediction is Rice, but user uploaded Wheat or Wheat score is significant
+                if selected_crop == "Auto-Detect (All Crops)" and "Rice" in overall_class and "Wheat" in crop_results:
+                    wheat_class, wheat_conf, wheat_prob = crop_results["Wheat"]
+                    if wheat_prob > 0.05:
+                        st.info(
+                            f"🌾 **Wheat Leaf Detected?** If your crop is **Wheat**, the top matching diagnosis is **`{wheat_class}`**.\n\n"
+                            f"_Tip: Change the 'Filter Crop Category' dropdown above to 'Wheat' to lock view to Wheat diseases._"
+                        )
 
                 if confidence < 70.0:
                     st.warning("⚠️ Low confidence in prediction. Please try a clearer photo!")
