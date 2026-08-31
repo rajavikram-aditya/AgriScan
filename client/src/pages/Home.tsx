@@ -78,7 +78,7 @@ export default function Home() {
       <aside className={`workspace-rail ${mobileNavOpen ? "open" : ""}`}>
         <div className="rail-brand">
           <div className="brand-mark" aria-hidden="true">
-            <img className="mark-image" src="/manus-storage/agriscan-mark_0ca6187a.png" alt="" />
+            <img className="mark-image" src="/assets/agriscan-mark.png" alt="" />
           </div>
           <div>
             <div className="brand-name">AgriScan</div>
@@ -129,7 +129,7 @@ export default function Home() {
             <p className="hero-intro">A clear leaf photo is the beginning of a better field decision. AgriScan reads visual signals and turns them into a practical first look.</p>
           </div>
           <div className="hero-aside">
-            <div className="hero-photo"><img src="/manus-storage/agriscan-hero-leaf_eb265ec3.jpg" alt="Close-up of a healthy leaf in morning light" /></div>
+            <div className="hero-photo"><img src="/assets/agriscan-hero-leaf.jpg" alt="Close-up of a healthy leaf in morning light" /></div>
             <div className="hero-aside-line" />
             <p>“The best scan starts with natural light, a steady hand, and the whole leaf in frame.”</p>
             <span>FIELD NOTE 014</span>
@@ -145,7 +145,7 @@ export default function Home() {
 
             {!previewUrl ? (
               <button className="dropzone" onClick={() => fileInput.current?.click()} aria-label="Choose a leaf image">
-                <div className="dropzone-orbit"><img className="dropzone-mark" src="/manus-storage/agriscan-mark_0ca6187a.png" alt="" /><Upload size={16} /></div>
+                <div className="dropzone-orbit"><img className="dropzone-mark" src="/assets/agriscan-mark.png" alt="" /><Upload size={16} /></div>
                 <span className="dropzone-title">Drop a leaf image here</span>
                 <span className="dropzone-copy">or choose a file from your device</span>
                 <span className="dropzone-meta"><Camera size={14} /> Camera-ready · up to 200 MB</span>
@@ -191,7 +191,7 @@ export default function Home() {
         )}
 
         <section className="how-section" id="how-it-works">
-          <div className="how-intro"><div className="section-kicker">The method</div><h2>From leaf<br /><em>to field note.</em></h2><img className="method-image" src="/manus-storage/agriscan-crop-detail_03d55572.jpg" alt="Macro detail of a crop leaf" /></div>
+          <div className="how-intro"><div className="section-kicker">The method</div><h2>From leaf<br /><em>to field note.</em></h2><img className="method-image" src="/assets/agriscan-crop-detail.jpg" alt="Macro detail of a crop leaf" /></div>
           <div className="method-steps">
             <div className="method-step"><span>01</span><h3>Frame it</h3><p>Fill the view with one leaf and find soft, natural light.</p></div>
             <div className="method-step"><span>02</span><h3>Read it</h3><p>The model looks for visual patterns across 22 crop classes.</p></div>
@@ -199,7 +199,7 @@ export default function Home() {
           </div>
         </section>
 
-        <footer className="site-footer"><div className="footer-brand"><div className="brand-mark small"><img className="mark-image" src="/manus-storage/agriscan-mark_0ca6187a.png" alt="" /></div><span>AgriScan</span></div><span>Transfer-learning plant disease detection</span><span>Built for better field decisions.</span></footer>
+        <footer className="site-footer"><div className="footer-brand"><div className="brand-mark small"><img className="mark-image" src="/assets/agriscan-mark.png" alt="" /></div><span>AgriScan</span></div><span>Transfer-learning plant disease detection</span><span>Built for better field decisions.</span></footer>
       </main>
     </div>
   );

@@ -159,7 +159,7 @@ h2 { margin: 11px 0 0; color: var(--agri-ink); font-size: 27px; line-height: 1.0
 .result-footer button { display: inline-flex; align-items: center; gap: 4px; padding: 0; color: var(--agri-green); border: 0; background: transparent; font-size: 10px; font-weight: 700; }
 .result-footer button:hover { text-decoration: underline; }
 
-.how-section { display: grid; grid-template-columns: 230px minmax(0,1fr); gap: 70px; padding: 115px 0 97px; background-image: linear-gradient(rgba(246,250,245,.92), rgba(246,250,245,.92)), url("/manus-storage/agriscan-field-texture_3802a42d.jpg"); background-size: cover; background-position: center; }
+.how-section { display: grid; grid-template-columns: 230px minmax(0,1fr); gap: 70px; padding: 115px 0 97px; background-image: linear-gradient(rgba(246,250,245,.92), rgba(246,250,245,.92)), url("/assets/agriscan-field-texture.jpg"); background-size: cover; background-position: center; }
 
 .how-intro h2 { margin-top: 14px; font-size: 34px; line-height: 1.02; }
 .method-image { width: 128px; height: 93px; display: block; margin-top: 28px; object-fit: cover; border-radius: 12px 12px 12px 3px; filter: saturate(.82); }
