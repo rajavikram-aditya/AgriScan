@@ -233,6 +233,14 @@ export default defineConfig({
       "localhost",
       "127.0.0.1",
     ],
+    proxy: {
+      // Forward /api/* → Flask backend (port 5000), stripping the /api prefix
+      "/api": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],

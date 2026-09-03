@@ -15,6 +15,7 @@ from PIL import Image
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 from disease_info import disease_info
+from explainability import run_gradcam
 from preprocessing import (
     convert_to_rgb,
     expand_batch_dim,
@@ -88,6 +89,15 @@ h2 { font-size:2rem; }
 [data-testid="stImage"] { animation:rise 300ms ease-out; }
 @keyframes rise { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 @keyframes grow { from{width:0} to{width:var(--fill)} }
+.gradcam-section { margin-top:1.8rem; }
+.gradcam-card { background:white; border:1px solid var(--line); border-radius:24px; padding:1.55rem 1.75rem; box-shadow:0 12px 36px rgba(25,68,46,.055); }
+.gradcam-kicker { color:#7c3aed; text-transform:uppercase; letter-spacing:.18em; font-size:.72rem; font-weight:700; margin-bottom:.5rem; }
+.gradcam-title { font:700 1.45rem 'Space Grotesk'; margin:.3rem 0 .35rem; color:var(--ink); }
+.gradcam-subtitle { color:var(--muted); font-size:.88rem; line-height:1.6; margin-bottom:1.2rem; }
+.gradcam-legend { display:flex; align-items:center; gap:.6rem; font-size:.78rem; color:var(--muted); margin-top:.7rem; }
+.gradcam-legend-bar { flex:1; height:10px; border-radius:99px; background:linear-gradient(90deg,#00f,#0ff,#0f0,#ff0,#f00); }
+.gradcam-layer { display:inline-flex; align-items:center; gap:.4rem; margin-top:.9rem; padding:.35rem .7rem; background:#f3f0ff; color:#7c3aed; border-radius:8px; font-size:.75rem; font-weight:700; }
+.gradcam-alpha-note { color:var(--muted); font-size:.8rem; margin-top:.5rem; }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 """,
@@ -126,6 +136,11 @@ with st.sidebar:
     st.divider()
     st.markdown("**About the model**")
     st.caption("AgriScan uses MobileNetV2 transfer learning across 22 crop and disease classes.")
+    st.divider()
+    st.markdown("**Grad-CAM explainability**")
+    show_gradcam = st.checkbox("Show AI visual explanation after scan", value=True)
+    gradcam_alpha = st.slider("Heatmap intensity", 0.2, 0.8, 0.4, 0.05,
+                              help="Blend strength of the heatmap over the image")
     if DEBUG_MODE:
         show_pipeline = st.checkbox("Show processing pipeline", value=False)
     else:
@@ -229,5 +244,78 @@ if "raw_prediction" in st.session_state and source_file:
     with advice_b:
         st.markdown(f'<div class="advice-box"><strong>Recommended next step</strong><p>{info.get("treatment", "No treatment available.")}</p></div>', unsafe_allow_html=True)
     st.markdown('</div></div>', unsafe_allow_html=True)
+
+    # ── Grad-CAM Visual Explanation ────────────────────────────────────────
+    if show_gradcam:
+        st.markdown('<div class="gradcam-section">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="gradcam-card">'
+            '<div class="gradcam-kicker">03 · AI Visual Explanation</div>'
+            '<div class="gradcam-title">Grad-CAM Heatmap</div>'
+            '<div class="gradcam-subtitle">'
+            'The colour overlay shows <strong>which regions of the leaf</strong> most '
+            'influenced the model&apos;s decision. Red/yellow areas have the highest '
+            'activation \u2014 they are where the model is &quot;looking&quot;. Blue areas had '
+            'little influence on the prediction.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        with st.spinner("Generating Grad-CAM heatmap…"):
+            try:
+                gradcam_result = run_gradcam(
+                    model=model,
+                    original_image_rgb=rgb_image,
+                    preprocessed_array=batched_array,
+                    predicted_class_index=overall_index,
+                    alpha=gradcam_alpha,
+                )
+
+                col_overlay, col_raw = st.columns(2, gap="large")
+                with col_overlay:
+                    st.image(
+                        gradcam_result["overlay_image"],
+                        caption="Heatmap overlay — regions that drove the prediction",
+                        use_container_width=True,
+                    )
+                with col_raw:
+                    # Display raw heatmap as a false-colour image for comparison
+                    import cv2 as _cv2
+                    raw_u8 = (gradcam_result["heatmap"] * 255).astype(np.uint8)
+                    raw_jet = _cv2.applyColorMap(raw_u8, _cv2.COLORMAP_JET)
+                    raw_rgb = _cv2.cvtColor(raw_jet, _cv2.COLOR_BGR2RGB)
+                    st.image(
+                        raw_rgb,
+                        caption="Raw Grad-CAM heatmap (without original image)",
+                        use_container_width=True,
+                    )
+
+                # Colour legend
+                st.markdown(
+                    '<div class="gradcam-legend">'
+                    '<span>Low activation</span>'
+                    '<div class="gradcam-legend-bar"></div>'
+                    '<span>High activation</span>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Technical details
+                st.markdown(
+                    f'<div class="gradcam-layer">'
+                    f'⚙ Conv layer used: <code style="background:transparent">{gradcam_result["layer_used"]}</code>'
+                    f'</div>'
+                    f'<div class="gradcam-alpha-note">'
+                    f'Heatmap intensity: {gradcam_alpha:.0%} · '
+                    f'Class explained: <strong>{disease_class.replace("___", " · ").replace("_", " ")}</strong>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            except Exception as _exc:
+                st.warning(f"Grad-CAM generation failed: {_exc}")
+
+        st.markdown('</div>', unsafe_allow_html=True)  # close gradcam-card
+        st.markdown('</div>', unsafe_allow_html=True)  # close gradcam-section
 
 st.markdown('<div class="footer">AgriScan · Transfer-learning plant disease detection · For decision support, not a substitute for an agronomist.</div>', unsafe_allow_html=True)
