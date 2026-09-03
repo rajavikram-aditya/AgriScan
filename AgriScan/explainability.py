@@ -27,24 +27,58 @@ def find_last_conv_layer(model) -> str:
     model.layers in reverse and returning the first layer whose output tensor
     has exactly 4 dimensions (batch, height, width, channels).
 
-    This avoids hard-coding a layer name that may differ across TF/Keras
-    versions (e.g. 'Conv_1', 'out_relu', 'block_16_project_BN', etc.).
+    Three strategies are tried in order, to handle differences across
+    TF/Keras versions (Keras 2 vs Keras 3 / TF 2.16+):
+
+    1. ``layer.output_shape``  — works in Keras 2 / TF ≤ 2.15
+    2. ``layer.output.shape``  — works in Keras 3 for connected functional layers
+    3. ``isinstance`` type check — final fallback; finds the last Conv2D by
+       class type (picks Conv_1 for MobileNetV2, the correct Grad-CAM target)
 
     Raises RuntimeError if no suitable layer is found.
     """
+    import tensorflow as tf  # lazy import
+
+    # ── Strategy 1: output_shape property (Keras 2 / older TF) ──────────────
     for layer in reversed(model.layers):
         try:
             out_shape = layer.output_shape
-        except AttributeError:
-            continue
+        except Exception:
+            out_shape = None
 
-        # output_shape can be a list of shapes for layers with multiple outputs
-        shapes = out_shape if isinstance(out_shape, list) else [out_shape]
-        for shape in shapes:
-            if isinstance(shape, (list, tuple)) and len(shape) == 4:
-                print(f"[Grad-CAM] Using conv layer: {layer.name!r}  "
-                      f"output shape: {shape}")
-                return layer.name
+        if out_shape is not None:
+            shapes = out_shape if isinstance(out_shape, list) else [out_shape]
+            for shape in shapes:
+                if isinstance(shape, (list, tuple)) and len(shape) == 4:
+                    print(f"[Grad-CAM] Using conv layer (output_shape): "
+                          f"{layer.name!r}  shape: {shape}")
+                    return layer.name
+
+    # ── Strategy 2: layer.output.shape (Keras 3 / TF 2.16+) ─────────────────
+    for layer in reversed(model.layers):
+        try:
+            shape = tuple(layer.output.shape)
+        except Exception:
+            continue
+        if len(shape) == 4:
+            print(f"[Grad-CAM] Using conv layer (output.shape): "
+                  f"{layer.name!r}  shape: {shape}")
+            return layer.name
+
+    # ── Strategy 3: type-based fallback ──────────────────────────────────────
+    # Prefer plain Conv2D (last one before pooling, e.g. 'Conv_1' in MobileNetV2)
+    for layer in reversed(model.layers):
+        if isinstance(layer, tf.keras.layers.Conv2D):
+            print(f"[Grad-CAM] Using conv layer (Conv2D type): {layer.name!r}")
+            return layer.name
+
+    # Accept DepthwiseConv2D as last resort
+    for layer in reversed(model.layers):
+        if isinstance(layer, (tf.keras.layers.Conv2D,
+                               tf.keras.layers.DepthwiseConv2D)):
+            print(f"[Grad-CAM] Using conv layer (DepthwiseConv2D type): "
+                  f"{layer.name!r}")
+            return layer.name
 
     raise RuntimeError(
         "Could not find a convolutional layer with 4-D output in the model. "
